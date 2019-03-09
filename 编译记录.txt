@@ -1,0 +1,7 @@
+编译记录
+	手工添加elasticsearch-sql包
+	修改pom.xml =》： ；
+
+yml配置文件注意空格
+
+STS 需安装lombok
