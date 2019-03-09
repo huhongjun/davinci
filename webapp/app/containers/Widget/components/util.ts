@@ -20,9 +20,13 @@ import {
   PIVOT_CANVAS_AXIS_SIZE_LIMIT,
   PIVOT_DEFAULT_SCATTER_SIZE_TIMES
 } from '../../../globalConstants'
-import { DimetionType, IChartStyles } from './Pivot/Pivot'
-import { IChartLine, IChartUnit, IChartInfo } from './Pivot/Chart'
-import widgetlibs from '../../../assets/json/widgetlib'
+import { DimetionType, IChartStyles, IChartInfo } from './Widget'
+import { IChartLine, IChartUnit } from './Pivot/Chart'
+import widgetlibs from '../config'
+import PivotTypes from '../config/pivot/PivotTypes'
+import ChartTypes from '../config/chart/ChartTypes'
+const pivotlibs = widgetlibs['pivot']
+const chartlibs = widgetlibs['chart']
 import { uuid } from '../../../utils/util'
 
 export function getAggregatorLocale (agg) {
@@ -235,8 +239,23 @@ export function checkChartEnable (dimetionsCount: number, metricsCount: number, 
   const chartArr = Array.isArray(charts) ? charts : [charts]
   for (const chart of chartArr) {
     const { requireDimetions, requireMetrics } = chart
-    if (dimetionsCount < requireDimetions || metricsCount < requireMetrics) {
-      return false
+    if (Array.isArray(requireDimetions)) {
+      if (dimetionsCount < requireDimetions[0] || dimetionsCount > requireDimetions[1]) {
+        return false
+      }
+    } else {
+      if (dimetionsCount !== requireDimetions) {
+        return false
+      }
+    }
+    if (Array.isArray(requireMetrics)) {
+      if (metricsCount < requireMetrics[0] || metricsCount > requireMetrics[1]) {
+        return false
+      }
+    } else {
+      if (metricsCount !== requireMetrics) {
+        return false
+      }
     }
   }
   return true
@@ -279,15 +298,11 @@ export function metricAxisLabelFormatter (value) {
 }
 
 export function getPivot (): IChartInfo {
-  return widgetlibs[0]
+  return pivotlibs.find((p) => p.id === PivotTypes.PivotTable)
 }
 
-export function getBar (): IChartInfo {
-  return widgetlibs[2]
-}
-
-export function getScatter (): IChartInfo {
-  return widgetlibs[3]
+export function getTable (): IChartInfo {
+  return chartlibs.find((c) => c.id === ChartTypes.Table)
 }
 
 export function getStyleConfig (chartStyles: IChartStyles): IChartStyles {
@@ -484,7 +499,7 @@ export function getTooltipPosition (point, params, dom, rect, size) {
   ]
 }
 
-export function getTooltipLabel (seriesData, cols, rows, metrics, color, label, size, scatterXAxis, tip) {
+export function getPivotTooltipLabel (seriesData, cols, rows, metrics, color, label, size, scatterXAxis, tip) {
   let dimetionColumns = cols.concat(rows)
   let metricColumns = [...metrics]
   if (color) {
@@ -541,6 +556,64 @@ export function getTooltipLabel (seriesData, cols, rows, metrics, color, label, 
             : record[dc]
           : ''
         return `${dc}: ${value}`
+      }))
+      .join('<br/>')
+  }
+}
+
+export function getChartTooltipLabel (type, seriesData, options) {
+  const { cols, metrics, color, size, scatterXAxis, tip } = options
+  let dimetionColumns = cols
+  let metricColumns = [...metrics]
+  if (color) {
+    dimetionColumns = dimetionColumns.concat(color.items.map((i) => i.name))
+  }
+  if (size) {
+    metricColumns = metricColumns.concat(size.items)
+  }
+  if (scatterXAxis) {
+    metricColumns = metricColumns.concat(scatterXAxis.items)
+  }
+  if (tip) {
+    metricColumns = metricColumns.concat(tip.items)
+  }
+
+  dimetionColumns = dimetionColumns.reduce((arr, dc) => {
+    if (!arr.includes(dc)) {
+      arr.push(dc)
+    }
+    return arr
+  }, [])
+  metricColumns = metricColumns.reduce((arr, mc) => {
+    const decodedName = decodeMetricName(mc.name)
+    if (!arr.find((m) => m.name.includes(decodedName) && m.agg === mc.agg)) {
+      arr.push(mc)
+    }
+    return arr
+  }, [])
+
+  return function (params) {
+    const { seriesIndex, dataIndex } = params
+    const record = (type === 'funnel' || type === 'map')
+      ? seriesData[dataIndex]
+      : seriesData[seriesIndex][dataIndex]
+    return dimetionColumns
+      .map((dc) => {
+        const value = record
+          ? Array.isArray(record)
+            ? record[0][dc]
+            : record[dc]
+          : ''
+        return `${dc}: ${value}`
+      })
+      .concat(metricColumns.map((mc) => {
+        const decodedName = decodeMetricName(mc.name)
+        const value = record
+          ? Array.isArray(record)
+            ? record.reduce((sum, r) => sum + r[`${mc.agg}(${decodedName})`], 0)
+            : record[`${mc.agg}(${decodedName})`]
+          : 0
+        return `${decodedName}: ${value}`
       }))
       .join('<br/>')
   }

@@ -1,6 +1,7 @@
 import * as React from 'react'
 import * as classnames from 'classnames'
-import { IPivotMetric, IDrawingData, IMetricAxisConfig, DimetionType, RenderType, ILegend, IChartStyles } from './Pivot'
+import { IDrawingData, IMetricAxisConfig, ILegend } from './Pivot'
+import { IWidgetMetric, DimetionType, RenderType, IChartStyles } from '../Widget'
 import Cell from './Cell'
 import Chart, { IChartUnit, IChartLine, IChartBlock } from './Chart'
 import { PIVOT_CANVAS_SIZE_LIMIT, PIVOT_CANVAS_POLAR_SIZE_LIMIT } from '../../../../globalConstants'
@@ -25,7 +26,7 @@ export interface ITableBodyProps {
   rowTree: object
   colTree: object
   tree: object
-  metrics: IPivotMetric[]
+  metrics: IWidgetMetric[]
   metricAxisConfig: IMetricAxisConfig
   chartStyles: IChartStyles
   drawingData: IDrawingData
@@ -39,6 +40,9 @@ export interface ITableBodyProps {
   legend: ILegend
   onCheckTableInteract?: () => boolean
   onDoInteract?: (triggerData: object) => void
+  getDataDrillDetail?: (position: string) => void
+  isDrilling?: boolean
+  // onHideDrillPanel?: (swtich: boolean) => void
 }
 
 export class TableBody extends React.Component<ITableBodyProps, {}> {
@@ -198,7 +202,10 @@ export class TableBody extends React.Component<ITableBodyProps, {}> {
       renderType,
       legend,
       onCheckTableInteract,
-      onDoInteract
+      onDoInteract,
+      getDataDrillDetail,
+      isDrilling
+      // onHideDrillPanel
     } = this.props
     const { elementSize, unitMetricWidth, unitMetricHeight, tableBodyCollapsed } = drawingData
     let tableBody = null
@@ -475,6 +482,9 @@ export class TableBody extends React.Component<ITableBodyProps, {}> {
           legend={legend}
           onCheckTableInteract={onCheckTableInteract}
           onDoInteract={onDoInteract}
+          getDataDrillDetail={getDataDrillDetail}
+          isDrilling={isDrilling}
+          // onHideDrillPanel={onHideDrillPanel}
         />
       )
     } else {

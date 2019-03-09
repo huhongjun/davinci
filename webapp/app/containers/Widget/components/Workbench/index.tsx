@@ -16,11 +16,11 @@ import { makeSelectCurrentWidget, makeSelectLoading, makeSelectDataLoading, make
 import { makeSelectBizlogics } from '../../../Bizlogic/selectors'
 
 import OperatingPanel from './OperatingPanel'
-import { IPivotProps } from '../Pivot/Pivot'
-import ScrollablePivot from '../Pivot'
+import Widget, { IWidgetProps } from '../Widget'
 import EditorHeader from '../../../../components/EditorHeader'
 import { DEFAULT_SPLITER } from '../../../../globalConstants'
 import { getStyleConfig } from 'containers/Widget/components/util'
+import ChartTypes from '../../config/chart/ChartTypes'
 const message = require('antd/lib/message')
 const styles = require('./Workbench.less')
 
@@ -81,8 +81,8 @@ interface IWorkbenchStates {
   queryParams: any[]
   cache: boolean
   expired: number
-  currentWidgetConfig: IPivotProps
-  pivotProps: IPivotProps
+  currentWidgetConfig: IWidgetProps
+  widgetProps: IWidgetProps
 }
 
 export class Workbench extends React.Component<IWorkbenchProps, IWorkbenchStates> {
@@ -97,17 +97,20 @@ export class Workbench extends React.Component<IWorkbenchProps, IWorkbenchStates
       cache: false,
       expired: 300,
       currentWidgetConfig: null,
-      pivotProps: {
+      widgetProps: {
         data: [],
         cols: [],
         rows: [],
         metrics: [],
         filters: [],
         chartStyles: getStyleConfig({}),
+        selectedChart: ChartTypes.Table,
         orders: [],
         queryParams: [],
         cache: false,
-        expired: 300
+        expired: 300,
+        mode: 'pivot',
+        model: {}
       }
     }
   }
@@ -190,11 +193,11 @@ export class Workbench extends React.Component<IWorkbenchProps, IWorkbenchStates
     })
   }
 
-  private setPivotProps = (pivotProps: IPivotProps) => {
-    const data = pivotProps.data || this.state.pivotProps.data
+  private setWidgetProps = (widgetProps: IWidgetProps) => {
+    const data = widgetProps.data || this.state.widgetProps.data
     this.setState({
-      pivotProps: {
-        ...pivotProps,
+      widgetProps: {
+        ...widgetProps,
         data
       }
     })
@@ -202,7 +205,7 @@ export class Workbench extends React.Component<IWorkbenchProps, IWorkbenchStates
 
   private saveWidget = () => {
     const { params, onAddWidget, onEditWidget } = this.props
-    const { id, name, description, selectedView, queryParams, cache, expired, pivotProps } = this.state
+    const { id, name, description, selectedView, queryParams, cache, expired, widgetProps } = this.state
     if (!name.trim()) {
       message.error('Widget名称不能为空')
       return
@@ -214,7 +217,7 @@ export class Workbench extends React.Component<IWorkbenchProps, IWorkbenchStates
       viewId: selectedView.id,
       projectId: Number(params.pid),
       config: JSON.stringify({
-        ...pivotProps,
+        ...widgetProps,
         queryParams,
         cache,
         expired,
@@ -225,11 +228,16 @@ export class Workbench extends React.Component<IWorkbenchProps, IWorkbenchStates
     if (id) {
       onEditWidget({...widget, id}, () => {
         message.success('修改成功')
-        const editSign = localStorage.getItem('editWidgetFromDashboard')
-        if (editSign) {
-          localStorage.removeItem('editWidgetFromDashboard')
-          const [pid, portalId, portalName, dashboardId, itemId] = editSign.split(DEFAULT_SPLITER)
+        const editSignDashboard = sessionStorage.getItem('editWidgetFromDashboard')
+        const editSignDisplay = sessionStorage.getItem('editWidgetFromDisplay')
+        if (editSignDashboard) {
+          sessionStorage.removeItem('editWidgetFromDashboard')
+          const [pid, portalId, portalName, dashboardId, itemId] = editSignDashboard.split(DEFAULT_SPLITER)
           this.props.router.replace(`/project/${pid}/portal/${portalId}/portalName/${portalName}/dashboard/${dashboardId}`)
+        } else if (editSignDisplay) {
+          sessionStorage.removeItem('editWidgetFromDisplay')
+          const [pid, displayId] = editSignDisplay.split(DEFAULT_SPLITER)
+          this.props.router.replace(`/project/${pid}/display/${displayId}`)
         } else {
           this.props.router.replace(`/project/${params.pid}/widgets`)
         }
@@ -243,7 +251,8 @@ export class Workbench extends React.Component<IWorkbenchProps, IWorkbenchStates
   }
 
   private cancel = () => {
-    localStorage.removeItem('editWidgetFromDashboard')
+    sessionStorage.removeItem('editWidgetFromDashboard')
+    sessionStorage.removeItem('editWidgetFromDisplay')
     this.props.router.goBack()
   }
 
@@ -265,12 +274,13 @@ export class Workbench extends React.Component<IWorkbenchProps, IWorkbenchStates
       cache,
       expired,
       currentWidgetConfig,
-      pivotProps
+      widgetProps
     } = this.state
 
     return (
       <div className={styles.workbench}>
         <EditorHeader
+          currentType="workbench"
           className={styles.header}
           name={name}
           description={description}
@@ -296,13 +306,13 @@ export class Workbench extends React.Component<IWorkbenchProps, IWorkbenchStates
             onCacheChange={this.cacheChange}
             onExpiredChange={this.expiredChange}
             onLoadData={onLoadData}
-            onSetPivotProps={this.setPivotProps}
+            onSetWidgetProps={this.setWidgetProps}
             onLoadDistinctValue={onLoadDistinctValue}
           />
           <div className={styles.viewPanel}>
-            <div className={styles.pivotBlock}>
-              <ScrollablePivot
-                {...pivotProps}
+            <div className={styles.widgetBlock}>
+              <Widget
+                {...widgetProps}
                 loading={dataLoading}
               />
             </div>

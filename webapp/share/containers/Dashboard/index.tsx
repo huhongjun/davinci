@@ -22,7 +22,6 @@ import * as React from 'react'
 import Helmet from 'react-helmet'
 import { connect } from 'react-redux'
 import { createStructuredSelector } from 'reselect'
-import * as classnames from 'classnames'
 
 import { compose } from 'redux'
 import injectReducer from 'utils/injectReducer'
@@ -34,12 +33,12 @@ import Container from '../../../app/components/Container'
 import { getMappingLinkage, processLinkage, removeLinkage } from 'components/Linkages'
 import DashboardItem from '../../../app/containers/Dashboard/components/DashboardItem'
 import FullScreenPanel from '../../../app/containers/Dashboard/components/fullScreenPanel/FullScreenPanel'
-import { Responsive, WidthProvider } from 'react-grid-layout'
+import { Responsive, WidthProvider } from '../../../libs/react-grid-layout'
 
 import { IFilterChangeParam } from '../../../app/components/Filters'
 import DashboardFilterPanel from 'containers/Dashboard/components/DashboardFilterPanel'
 
-import { RenderType, IPivotProps } from '../../../app/containers/Widget/components/Pivot/Pivot'
+import { RenderType, IWidgetProps } from '../../../app/containers/Widget/components/Widget'
 const Row = require('antd/lib/row')
 const Col = require('antd/lib/col')
 
@@ -50,7 +49,9 @@ import {
   setIndividualDashboard,
   loadWidgetCsv,
   loadCascadeSourceFromDashboard,
-  resizeAllDashboardItem
+  resizeAllDashboardItem,
+  drillDashboardItem,
+  deleteDrillHistory
 } from './actions'
 import {
   makeSelectDashboard,
@@ -64,19 +65,14 @@ import {
 } from './selectors'
 import { decodeMetricName } from '../../../app/containers/Widget/components/util'
 import {
-  DEFAULT_SPLITER,
-  ECHARTS_RENDERER,
   GRID_COLS,
   GRID_ROW_HEIGHT,
   GRID_ITEM_MARGIN,
-  SQL_NUMBER_TYPES,
   GRID_BREAKPOINTS
 } from '../../../app/globalConstants'
 
 const styles = require('../../../app/containers/Dashboard/Dashboard.less')
-const utilStyles = require('../../../app/assets/less/util.less')
 
-import widgetlibs from '../../../app/assets/json/widgetlib'
 import Login from '../../components/Login/index'
 
 const ResponsiveReactGridLayout = WidthProvider(Responsive)
@@ -99,7 +95,6 @@ interface IDashboardProps {
         globalParams: Array<{name: string, value: string}>
       }
       downloadCsvLoading: boolean
-      interactId: string
       renderType: RenderType
     }
   },
@@ -127,9 +122,27 @@ interface IDashboardProps {
     }
   ) => void,
   onSetIndividualDashboard: (id, shareInfo) => void,
-  onLoadWidgetCsv: (itemId: number, pivotProps: IPivotProps, dataToken: string) => void,
+  onLoadWidgetCsv: (
+    itemId: number,
+    params: {
+      groups: string[]
+      aggregators: Array<{column: string, func: string}>
+      filters: string[]
+      linkageFilters: string[]
+      globalFilters: string[]
+      params: Array<{name: string, value: string}>
+      linkageParams: Array<{name: string, value: string}>
+      globalParams: Array<{name: string, value: string}>
+      orders: Array<{column: string, direction: string}>
+      cache: boolean
+      expired: number
+    },
+    dataToken: string
+  ) => void,
   onLoadCascadeSourceFromDashboard: (controlId, viewId, dataToken, column, parents) => void
   onResizeAllDashboardItem: () => void
+  onDrillDashboardItem: (itemId: number, drillHistory: any) => void
+  onDeleteDrillHistory: (itemId: number, index: number) => void
 }
 
 interface IDashboardStates {
@@ -137,6 +150,7 @@ interface IDashboardStates {
   type: string,
   shareInfo: string,
   modalLoading: boolean,
+  interactingStatus: { [itemId: number]: boolean }
   allowFullScreen: boolean,
   currentDataInFullScreen: any,
   showLogin: boolean,
@@ -152,7 +166,7 @@ export class Share extends React.Component<IDashboardProps, IDashboardStates> {
       shareInfo: '',
 
       modalLoading: false,
-
+      interactingStatus: {},
       allowFullScreen: false,
       currentDataInFullScreen: {},
       showLogin: false,
@@ -219,9 +233,12 @@ export class Share extends React.Component<IDashboardProps, IDashboardStates> {
     const { currentItems, currentItemsInfo } = nextProps
     if (currentItemsInfo) {
       if (Object.values(currentItemsInfo).filter((info) => !!info.datasource.length).length === currentItems.length) {
-        this.setState({
-          phantomRenderSign: true
-        })
+        // FIXME
+        setTimeout(() => {
+          this.setState({
+            phantomRenderSign: true
+          })
+        }, 5000)
       }
     }
   }
@@ -240,14 +257,39 @@ export class Share extends React.Component<IDashboardProps, IDashboardStates> {
   }
 
   private getChartData = (renderType: RenderType, itemId: number, widgetId: number, queryParams?: any) => {
+    this.getData(this.props.onLoadResultset, renderType, itemId, widgetId, queryParams)
+  }
+
+  private downloadCsv = (itemId: number, widgetId: number, shareInfo: string) => {
+    this.getData(
+      (renderType, itemId, dataToken, queryParams) => {
+        this.props.onLoadWidgetCsv(itemId, queryParams, dataToken)
+      },
+      'rerender',
+      itemId,
+      widgetId
+    )
+  }
+
+  private getData = (
+    callback: (
+      renderType: RenderType,
+      itemId: number,
+      dataToken: string,
+      queryParams?: any
+    ) => void,
+    renderType: RenderType,
+    itemId: number,
+    widgetId: number,
+    queryParams?: any
+  ) => {
     const {
       currentItemsInfo,
-      widgets,
-      onLoadResultset
+      widgets
     } = this.props
 
     const widget = widgets.find((w) => w.id === widgetId)
-    const widgetConfig: IPivotProps = JSON.parse(widget.config)
+    const widgetConfig: IWidgetProps = JSON.parse(widget.config)
     const { cols, rows, metrics, filters, color, label, size, xAxis, tip, orders, cache, expired } = widgetConfig
 
     const cachedQueryParams = currentItemsInfo[itemId].queryParams
@@ -257,13 +299,15 @@ export class Share extends React.Component<IDashboardProps, IDashboardStates> {
     let params
     let linkageParams
     let globalParams
+    let drillStatus
 
     if (queryParams) {
-      linkageFilters = queryParams.linkageFilters !== undefined ? queryParams.linkageFilters : cachedQueryParams.linkageFilters
-      globalFilters = queryParams.globalFilters !== undefined ? queryParams.globalFilters : cachedQueryParams.globalFilters
+      linkageFilters = queryParams.linkageFilters !== void 0 ? queryParams.linkageFilters : cachedQueryParams.linkageFilters
+      globalFilters = queryParams.globalFilters !== void 0 ? queryParams.globalFilters : cachedQueryParams.globalFilters
       params = queryParams.params ? queryParams.params : cachedQueryParams.params
       linkageParams = queryParams.linkageParams || cachedQueryParams.linkageParams
       globalParams = queryParams.globalParams || cachedQueryParams.globalParams
+      drillStatus = queryParams.drillStatus || void 0
     } else {
       linkageFilters = cachedQueryParams.linkageFilters
       globalFilters = cachedQueryParams.globalFilters
@@ -314,14 +358,14 @@ export class Share extends React.Component<IDashboardProps, IDashboardStates> {
         })))
     }
 
-    onLoadResultset(
+    callback(
       renderType,
       itemId,
       widget.dataToken,
       {
-        groups,
+        groups: drillStatus && drillStatus.groups ? drillStatus.groups : groups,
         aggregators,
-        filters: filters.map((i) => i.config.sql),
+        filters: drillStatus && drillStatus.filter ? drillStatus.filter.sqls : filters.map((i) => i.config.sql),
         linkageFilters,
         globalFilters,
         params,
@@ -343,17 +387,6 @@ export class Share extends React.Component<IDashboardProps, IDashboardStates> {
       clearTimeout(this.resizeSign)
       this.resizeSign = void 0
     }, 500)
-  }
-
-  private downloadCsv = (itemId: number, pivotProps: IPivotProps, shareInfo: string) => {
-    const {
-      currentItemsInfo,
-      onLoadWidgetCsv
-    } = this.props
-
-  //  const { filters, params } = currentItemsInfo[itemId].queryParams
-
-    onLoadWidgetCsv(itemId, pivotProps, shareInfo)
   }
 
   private visibleFullScreen = (currentChartData) => {
@@ -423,6 +456,12 @@ export class Share extends React.Component<IDashboardProps, IDashboardStates> {
         linkageParams: Object.values(params).reduce((arr: any[], p: any[]) => arr.concat(...p), [])
       })
     })
+    this.setState({
+      interactingStatus: {
+        ...this.state.interactingStatus,
+        [itemId]: true
+      }
+    })
   }
 
   private turnOffInteract = (itemId) => {
@@ -440,6 +479,12 @@ export class Share extends React.Component<IDashboardProps, IDashboardStates> {
         linkageParams: Object.values(params).reduce((arr: any[], p: any[]) => arr.concat(...p), [])
       })
     })
+    this.setState({
+      interactingStatus: {
+        ...this.state.interactingStatus,
+        [itemId]: false
+      }
+    })
   }
 
   private getOptions = (controlId, viewId, column, parents) => {
@@ -453,6 +498,113 @@ export class Share extends React.Component<IDashboardProps, IDashboardStates> {
       const { params: globalParams, filters: globalFilters } = queryParam
       this.getChartData('rerender', +itemId, item.widgetId, { globalParams, globalFilters })
     })
+  }
+
+  private dataDrill = (e) => {
+    const {
+      widgets,
+      currentItemsInfo,
+      onDrillDashboardItem
+    } = this.props
+    const { itemId, groups, widgetId, sourceDataFilter } = e
+    const widget = widgets.find((w) => w.id === widgetId)
+    const widgetConfig: IWidgetProps = JSON.parse(widget.config)
+    const { cols, rows, metrics, filters, color, label, size, xAxis, tip, orders, cache, expired } = widgetConfig
+    const drillHistory = currentItemsInfo[itemId]['queryParams']['drillHistory']
+    let sql = void 0
+    let name = void 0
+    let filterSource = void 0
+    let widgetConfigGroups = cols.concat(rows).filter((g) => g !== '指标名称')
+    let aggregators =  metrics.map((m) => ({
+      column: decodeMetricName(m.name),
+      func: m.agg
+    }))
+
+    if (color) {
+      widgetConfigGroups = widgetConfigGroups.concat(color.items.map((c) => c.name))
+    }
+    if (label) {
+      widgetConfigGroups = widgetConfigGroups.concat(label.items
+        .filter((l) => l.type === 'category')
+        .map((l) => l.name))
+      aggregators = aggregators.concat(label.items
+        .filter((l) => l.type === 'value')
+        .map((l) => ({
+          column: decodeMetricName(l.name),
+          func: l.agg
+        })))
+    }
+    let currentDrillStatus = void 0
+    if ((!drillHistory) || drillHistory.length === 0) {
+      if (widgetConfig) {
+        const dimetionAxis = widgetConfig.dimetionAxis
+        if (dimetionAxis === 'col') {
+          const cols = widgetConfig.cols
+          name = cols[cols.length - 1]
+        } else {
+          const rows = widgetConfig.rows
+          name = rows[rows.length - 1]
+        }
+        filterSource = sourceDataFilter.map((source) => {
+          if (source && source[name]) {
+            return source[name]
+          } else {
+            return source
+          }
+        })
+        sql = `${name} in (${filterSource.map((key) => `'${key}'`).join(',')})`
+      }
+      const sqls = widgetConfig.filters.map((i) => i.config.sql)
+      sqls.push(sql)
+      const isDrillUp = widgetConfigGroups.some((cg) => cg === groups)
+      currentDrillStatus = {
+        filter: {
+          filterSource,
+          name,
+          sql,
+          sqls,
+          visualType: 'string'
+        },
+        type: isDrillUp ? 'up' : 'down',
+        groups: isDrillUp ? widgetConfigGroups.filter((cg) => cg !== groups) : widgetConfigGroups.concat([groups]),
+        name: groups
+      }
+    } else {
+      const lastDrillHistory = drillHistory[drillHistory.length - 1]
+      name = lastDrillHistory.groups[lastDrillHistory.groups.length - 1]
+      filterSource = sourceDataFilter.map((source) => source[name])
+      sql = `${name} in (${filterSource.map((key) => `'${key}'`).join(',')})`
+      const sqls = lastDrillHistory.filter.sqls.concat(sql)
+      const isDrillUp = lastDrillHistory.groups.some((cg) => cg === groups)
+      currentDrillStatus = {
+        filter: {
+          filterSource,
+          name,
+          sql,
+          sqls,
+          visualType: 'string'
+        },
+        type: isDrillUp ? 'up' : 'down',
+        groups: isDrillUp ? lastDrillHistory.groups.filter((cg) => cg !== groups) : lastDrillHistory.groups.concat([groups]),
+        name: groups
+      }
+    }
+    onDrillDashboardItem(itemId, currentDrillStatus)
+    this.getChartData('rerender', itemId, widgetId, {
+        drillStatus: currentDrillStatus
+      })
+  }
+  private selectDrillHistory = (history, item, itemId, widgetId) => {
+    const { currentItemsInfo, onDeleteDrillHistory } = this.props
+    if (history) {
+      this.getChartData('rerender', itemId, widgetId, {
+        drillStatus: history
+      })
+    } else {
+      console.log('callback')
+      this.getChartData('rerender', itemId, widgetId)
+    }
+    onDeleteDrillHistory(itemId, item)
   }
 
   public render () {
@@ -469,6 +621,7 @@ export class Share extends React.Component<IDashboardProps, IDashboardStates> {
       mounted,
       shareInfo,
       showLogin,
+      interactingStatus,
       allowFullScreen,
       phantomRenderSign
     } = this.state
@@ -487,20 +640,27 @@ export class Share extends React.Component<IDashboardProps, IDashboardStates> {
           datasource,
           loading,
           downloadCsvLoading,
-          interactId,
           renderType
         } = currentItemsInfo[id]
 
         const widget = widgets.find((w) => w.id === widgetId)
+        const view = { model: widget.model }
+        const interacting = interactingStatus[id] || false
+        const drillHistory = currentItemsInfo[id]['queryParams']['drillHistory'] ? currentItemsInfo[id]['queryParams']['drillHistory'] : void 0
 
         itemblocks.push((
           <div key={id}>
             <DashboardItem
               itemId={id}
               widget={widget}
+              view={view}
               data={datasource}
               loading={loading}
               polling={polling}
+              onDrillData={this.dataDrill}
+              onSelectDrillHistory={this.selectDrillHistory}
+              interacting={interacting}
+              drillHistory={drillHistory}
               frequency={frequency}
               shareInfo={widget.dataToken}
               downloadCsvLoading={downloadCsvLoading}
@@ -523,7 +683,6 @@ export class Share extends React.Component<IDashboardProps, IDashboardStates> {
           h: height,
           i: `${id}`
         })
-        console.log(layouts)
       })
 
       grids = (
@@ -613,9 +772,11 @@ export function mapDispatchToProps (dispatch) {
     onLoadWidget: (token, resolve, reject) => dispatch(getWidget(token, resolve, reject)),
     onLoadResultset: (renderType, itemid, dataToken, params) => dispatch(getResultset(renderType, itemid, dataToken, params)),
     onSetIndividualDashboard: (widgetId, token) => dispatch(setIndividualDashboard(widgetId, token)),
-    onLoadWidgetCsv: (itemId, pivotProps, dataToken) => dispatch(loadWidgetCsv(itemId, pivotProps, dataToken)),
+    onLoadWidgetCsv: (itemId, params, dataToken) => dispatch(loadWidgetCsv(itemId, params, dataToken)),
     onLoadCascadeSourceFromDashboard: (controlId, viewId, dataToken, column, parents) => dispatch(loadCascadeSourceFromDashboard(controlId, viewId, dataToken, column, parents)),
-    onResizeAllDashboardItem: () => dispatch(resizeAllDashboardItem())
+    onResizeAllDashboardItem: () => dispatch(resizeAllDashboardItem()),
+    onDrillDashboardItem: (itemId, drillHistory) => dispatch(drillDashboardItem(itemId, drillHistory)),
+    onDeleteDrillHistory: (itemId, index) => dispatch(deleteDrillHistory(itemId, index))
   }
 }
 

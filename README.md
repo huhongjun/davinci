@@ -7,7 +7,7 @@ Davinci
 
 **Davinci是一个DVAAS（Data Visualization as a Service）平台解决方案。**
 
-Davinci面向业务人员/数据工程师/数据分析师/数据科学家，致力于提供一站式数据可视化解决方案。既可作为公有云/私有云独立使用，也可作为可视化插件集成到三方系统。用户只需在可视化UI上简单配置即可服务多种数据可视化应用，并支持高级交互/行业分析/模式探索/社交智能等可视化功能。
+Davinci面向业务人员/数据工程师/数据分析师/数据科学家，致力于提供一站式数据可视化解决方案。既可作为公有云/私有云独立使用，也可作为可视化插件集成到三方系统。用户只需在可视化UI上简单配置即可满足多种数据可视化需求，并支持高级交互/行业分析/模式探索/社交智能等可视化功能。
 
 ## 设计理念
 
@@ -66,7 +66,7 @@ Davinci面向业务人员/数据工程师/数据分析师/数据科学家，致�
 
 
 ```
-   unzip davinci-assembly_3.0.1-0.3.0-SNAPSHOT-dist.zip
+   unzip davinci-assembly_3.0.1-0.3.0-SNAPSHOT-dist-beta.3.zip
 
    cd config
 
@@ -215,11 +215,11 @@ Davinci面向业务人员/数据工程师/数据分析师/数据科学家，致�
 
 Documentation
 =============
-Please refer to [Davinci用户手册](https://edp-davinci.gitbooks.io/davinci-user-guide-cn/content), or download [PDF](https://legacy.gitbook.com/download/pdf/book/edp-davinci/davinci-user-guide-cn).
+Please refer to [Davinci用户手册](https://edp963.github.io/davinci/).
 
 Latest Release
 =============
-Please download the latest [RELEASE](https://github.com/edp963/davinci/releases/download/v0.3.0-beta.1/davinci-assembly_3.0.1-0.3.0-SNAPSHOT-dist-beta.1.zip).
+Please download the latest [RELEASE](https://github.com/edp963/davinci/releases/download/v0.3.0-beta.4/davinci-assembly_3.0.1-0.3.0-SNAPSHOT-dist-beta.4.zip).
 
 Get Help
 ============
