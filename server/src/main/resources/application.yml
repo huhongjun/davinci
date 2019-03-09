@@ -39,6 +39,9 @@ spring:
       test-on-borrow: false
       test-on-return: false
       filters: stat
+      break-after-acquire-failure: true
+      connection-error-retry-attempts: 3
+      validation-query: SELECT 1
 
   resources:
     static-locations: classpath:/META-INF/resources/, classpath:/resources/, classpath:/static/, file:${file.userfiles-path}, file:${file.web_resources}
@@ -63,6 +66,7 @@ spring:
   cache:
     caffeine:
       type: caffeine
+
 
 logging:
   config: file:${DAVINCI3_HOME}/config/logback.xml

@@ -38,7 +38,7 @@ import {
   DEFAULT_PRIMARY_COLOR } from '../../../app/globalConstants'
 import Login from '../../components/Login/index'
 import LayerItem from '../../../app/containers/Display/components/LayerItem'
-import { RenderType, IPivotProps } from '../../../app/containers/Widget/components/Pivot/Pivot'
+import { RenderType, IWidgetProps } from '../../../app/containers/Widget/components/Widget'
 import { decodeMetricName } from '../../../app/containers/Widget/components/util'
 
 const styles = require('../../../app/containers/Display/Display.less')
@@ -163,7 +163,7 @@ export class Display extends React.Component<IDisplayProps, IDisplayStates> {
     } = this.props
 
     const widget = widgets.find((w) => w.id === widgetId)
-    const widgetConfig: IPivotProps = JSON.parse(widget.config)
+    const widgetConfig: IWidgetProps = JSON.parse(widget.config)
     const { cols, rows, metrics, filters, color, label, size, xAxis, tip, orders, cache, expired } = widgetConfig
 
     const cachedQueryParams = layersInfo[itemId].queryParams
@@ -292,7 +292,7 @@ export class Display extends React.Component<IDisplayProps, IDisplayStates> {
     }
 
     if (backgroundColor) {
-      const rgb = [...backgroundColor, (opacity / 100)].join()
+      const rgb = backgroundColor.join()
       slideStyle.backgroundColor = `rgb(${rgb})`
     }
     if (backgroundImage) {
@@ -339,8 +339,9 @@ export class Display extends React.Component<IDisplayProps, IDisplayStates> {
       const slideStyle = this.getSlideStyle(JSON.parse(slide.config).slideParams)
       const layerItems =  Array.isArray(widgets) ? layers.map((layer) => {
         const widget = widgets.find((w) => w.id === layer.widgetId)
+        const view = { model: widget && widget.model }
         const layerId = layer.id
-        const { polling, frequency } = layer.params
+        const { polling, frequency } = JSON.parse(layer.params)
         const { datasource, loading, interactId, renderType } = layersInfo[layerId]
 
         return (
@@ -350,6 +351,7 @@ export class Display extends React.Component<IDisplayProps, IDisplayStates> {
             scale={scale}
             itemId={layerId}
             widget={widget}
+            view={view}
             data={datasource}
             layer={layer}
             loading={loading}

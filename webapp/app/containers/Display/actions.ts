@@ -19,6 +19,7 @@
  */
 
 import { ActionTypes } from './constants'
+import { IBaseline } from './components/LayerItem'
 
 export function loadDisplays (projectId) {
   return {
@@ -68,21 +69,24 @@ export function addDisplayFail () {
   }
 }
 
-export function loadDisplayDetail (id) {
+export function loadDisplayDetail (projectId, displayId) {
   return {
     type: ActionTypes.LOAD_DISPLAY_DETAIL,
     payload: {
-      id
+      projectId,
+      displayId
     }
   }
 }
-export function displayDetailLoaded (display, slide, layers) {
+export function displayDetailLoaded (display, slide, layers, widgets, bizlogics) {
   return {
     type: ActionTypes.LOAD_DISPLAY_DETAIL_SUCCESS,
     payload: {
       display,
       slide,
-      layers
+      layers,
+      widgets,
+      bizlogics
     }
   }
 }
@@ -248,6 +252,39 @@ export function selectLayer ({ id, selected, exclusive }) {
 export function clearLayersSelection () {
   return {
     type: ActionTypes.CLEAR_LAYERS_SELECTION
+  }
+}
+
+export function toggleLayersResizingStatus (layerIds: number[], resizing: boolean) {
+  return {
+    type: ActionTypes.TOGGLE_LAYERS_RESIZING_STATUS,
+    payload: {
+      layerIds,
+      resizing
+    }
+  }
+}
+export function toggleLayersDraggingStatus (layerIds: number[], dragging: boolean) {
+  return {
+    type: ActionTypes.TOGGLE_LAYERS_DRAGGING_STATUS,
+    payload: {
+      layerIds,
+      dragging
+    }
+  }
+}
+
+export function clearEditorBaselines () {
+  return {
+    type: ActionTypes.CLEAR_EDITOR_BASELINES
+  }
+}
+export function showEditorBaselines (baselines: IBaseline[]) {
+  return {
+    type: ActionTypes.SHOW_EDITOR_BASELINES,
+    payload: {
+      baselines
+    }
   }
 }
 

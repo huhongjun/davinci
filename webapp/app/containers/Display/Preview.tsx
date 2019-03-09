@@ -16,7 +16,7 @@ import sagaBizlogic from '../Bizlogic/sagas'
 import injectReducer from '../../utils/injectReducer'
 import injectSaga from '../../utils/injectSaga'
 
-import { GraphTypes, SecondaryGraphTypes } from 'utils/util'
+import { GraphTypes, SecondaryGraphTypes } from './components/util'
 import { echartsOptionsGenerator } from '../Widget/components/chartUtil'
 
 import Container from '../../components/Container'
@@ -30,13 +30,10 @@ import {
   makeSelectCurrentSlide,
   makeSelectDisplays,
   makeSelectCurrentLayers,
-  makeSelectCurrentLayersInfo,
-  makeSelectCurrentSelectedLayers } from './selectors'
+  makeSelectCurrentLayersInfo } from './selectors'
 
 import { hideNavigator } from '../App/actions'
-import { loadWidgets } from '../Widget/actions'
 import {
-  loadBizlogics,
   loadDataFromItem,
   loadCascadeSource, // TODO global filter in Display Preview
   loadBizdataSchema  } from '../Bizlogic/actions'
@@ -50,13 +47,12 @@ import {
 import {
   ECHARTS_RENDERER,
   DEFAULT_PRIMARY_COLOR } from '../../globalConstants'
-import widgetlibs from '../../assets/json/widgetlib'
 import LayerItem from './components/LayerItem'
 
 const styles = require('./Display.less')
 const stylesDashboard = require('../Dashboard/Dashboard.less')
 
-import { IPivotProps, RenderType } from '../Widget/components/Pivot/Pivot'
+import { IWidgetProps, RenderType } from '../Widget/components/Widget'
 import { decodeMetricName } from '../Widget/components/util'
 
 interface IBizdataIncomeParamObject {
@@ -75,7 +71,6 @@ interface IPreviewProps {
     [key: string]: {
       datasource: any[]
       loading: boolean
-      selected: boolean
       queryParams: {
         filters: string
         linkageFilters: string
@@ -90,9 +85,7 @@ interface IPreviewProps {
     }
   }
   onHideNavigator: () => void
-  onLoadWidgets: (projectId: number) => void
-  onLoadBizlogics: () => any
-  onLoadDisplayDetail: (id: any) => void
+  onLoadDisplayDetail: (projectId: number, displayId: number) => void
   onLoadDataFromItem: (
     renderType: RenderType,
     layerItemId: number,
@@ -131,14 +124,11 @@ export class Preview extends React.Component<IPreviewProps, IPreviewStates> {
   public componentWillMount () {
     const {
       params,
-      onLoadWidgets,
-      onLoadBizlogics,
       onLoadDisplayDetail
     } = this.props
     const projectId = +params.pid
     const displayId = +params.displayId
-    onLoadWidgets(projectId)
-    onLoadDisplayDetail(displayId)
+    onLoadDisplayDetail(projectId, displayId)
   }
 
   public componentDidMount () {
@@ -180,7 +170,7 @@ export class Preview extends React.Component<IPreviewProps, IPreviewStates> {
     } = this.props
 
     const widget = widgets.find((w) => w.id === widgetId)
-    const widgetConfig: IPivotProps = JSON.parse(widget.config)
+    const widgetConfig: IWidgetProps = JSON.parse(widget.config)
     const { cols, rows, metrics, filters, color, label, size, xAxis, tip, orders, cache, expired } = widgetConfig
 
     const cachedQueryParams = currentLayersInfo[itemId].queryParams
@@ -273,7 +263,6 @@ export class Preview extends React.Component<IPreviewProps, IPreviewStates> {
       width,
       height,
       backgroundColor,
-      opacity,
       backgroundImage
     } = slideParams
 
@@ -281,12 +270,13 @@ export class Preview extends React.Component<IPreviewProps, IPreviewStates> {
     slideStyle  = {
       overflow: 'visible',
       width: `${width * scale[0]}px`,
-      height: `${height * scale[1]}px`
+      height: `${height * scale[1]}px`,
+      backgroundSize: 'cover'
     }
 
     if (backgroundColor) {
-      const rgb = [...backgroundColor, (opacity / 100)].join()
-      slideStyle.backgroundColor = `rgb(${rgb})`
+      const rgb = backgroundColor.join()
+      slideStyle.backgroundColor = `rgba(${rgb})`
     }
     if (backgroundImage) {
       slideStyle.backgroundImage = `url("${backgroundImage}")`
@@ -297,6 +287,7 @@ export class Preview extends React.Component<IPreviewProps, IPreviewStates> {
   public render () {
     const {
       widgets,
+      bizlogics,
       currentDisplay,
       currentSlide,
       currentLayers,
@@ -307,11 +298,11 @@ export class Preview extends React.Component<IPreviewProps, IPreviewStates> {
     const slideStyle = this.getSlideStyle(JSON.parse(currentSlide.config).slideParams)
     const layerItems =  Array.isArray(widgets) ? currentLayers.map((layer) => {
       const widget = widgets.find((w) => w.id === layer.widgetId)
-      const chartInfo = widget && widgetlibs.find((wl) => wl.id === widget.type)
+      const view = widget && bizlogics.find((b) => b.id === widget.viewId)
       const layerId = layer.id
 
-      const { polling, frequency } = layer.params
-      const { datasource, loading, selected, interactId, rendered, renderType } = currentLayersInfo[layerId]
+      const { polling, frequency } = JSON.parse(layer.params)
+      const { datasource, loading, interactId, rendered, renderType } = currentLayersInfo[layerId]
 
       return (
         <LayerItem
@@ -320,9 +311,9 @@ export class Preview extends React.Component<IPreviewProps, IPreviewStates> {
           pure={true}
           scale={scale}
           layer={layer}
-          selected={selected}
           itemId={layerId}
           widget={widget}
+          view={view}
           data={datasource}
           loading={loading}
           polling={polling}
@@ -351,16 +342,13 @@ const mapStateToProps = createStructuredSelector({
   currentSlide: makeSelectCurrentSlide(),
   displays: makeSelectDisplays(),
   currentLayers: makeSelectCurrentLayers(),
-  currentLayersInfo: makeSelectCurrentLayersInfo(),
-  currentSelectedLayers: makeSelectCurrentSelectedLayers()
+  currentLayersInfo: makeSelectCurrentLayersInfo()
 })
 
 export function mapDispatchToProps (dispatch) {
   return {
     onHideNavigator: () => dispatch(hideNavigator()),
-    onLoadDisplayDetail: (id) => dispatch(loadDisplayDetail(id)),
-    onLoadWidgets: (projectId: number) => dispatch(loadWidgets(projectId)),
-    onLoadBizlogics: (projectId: number, resolve?: any) => dispatch(loadBizlogics(projectId, resolve)),
+    onLoadDisplayDetail: (projectId, displayId) => dispatch(loadDisplayDetail(projectId, displayId)),
     onLoadDataFromItem: (renderType, itemId, viewId, params) => dispatch(loadDataFromItem(renderType, itemId, viewId, params, 'display'))
   }
 }

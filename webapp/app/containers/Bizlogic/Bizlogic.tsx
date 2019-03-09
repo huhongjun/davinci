@@ -22,6 +22,7 @@ import * as React from 'react'
 import {connect} from 'react-redux'
 import {createStructuredSelector} from 'reselect'
 import { InjectedRouter } from 'react-router/lib/Router'
+import axios, { AxiosRequestConfig, AxiosPromise } from 'axios'
 
 import { compose } from 'redux'
 import injectReducer from '../../utils/injectReducer'
@@ -117,7 +118,7 @@ interface IBizlogicFormProps {
 }
 
 interface IBizlogicFormState {
-  expandedKeys: any[]
+  expandedKeys: string[]
   searchValue: string
   autoExpandParent: boolean
   modelType: string
@@ -131,7 +132,7 @@ interface IBizlogicFormState {
 
   treeData: any[]
   listData: any[]
-  teamExpandedKeys: any[]
+  teamExpandedKeys: string[]
   teamAutoExpandParent: boolean
   teamCheckedKeys: any[]
   selectedKeys: any[]
@@ -858,8 +859,10 @@ export class Bizlogic extends React.Component<IBizlogicFormProps, IBizlogicFormS
     const { teamParams } = this.state
     const { params, bizlogics } = this.props
     if (!teamParams.length) {
-      const { sql } = (bizlogics as any[]).find((b) => b.id === Number(params.bid))
-      this.getTeamTreeData(sql)
+      const sqlVal = params.bid
+        ? (bizlogics as any[]).find((b) => b.id === Number(params.bid)).sql
+        : bizlogics[0].sql
+      this.getTeamTreeData(sqlVal)
     }
   }
 
@@ -899,6 +902,38 @@ export class Bizlogic extends React.Component<IBizlogicFormProps, IBizlogicFormS
       teamParams: paramsTemp,
       listData: listDataFinal.slice()
     })
+  }
+
+  private handleTree = (clickKey, obj) => {
+    const { expandedKeys } = this.state
+
+    this.setState({
+      autoExpandParent: false
+    })
+
+    if (obj.selected) {
+      if (expandedKeys.indexOf(clickKey[0]) < 0) {
+        expandedKeys.push(clickKey[0])
+        this.setState({
+          expandedKeys
+        })
+      } else {
+        this.setState({
+          expandedKeys: expandedKeys.filter((e) => e !== clickKey[0])
+        })
+      }
+    } else {
+      let currentKey = []
+      if (expandedKeys.length === 0) {
+        expandedKeys.push(obj.node.props.title)
+        currentKey = expandedKeys
+      } else {
+        currentKey = expandedKeys.filter((e) => e !== obj.node.props.title)
+      }
+      this.setState({
+        expandedKeys: currentKey
+      })
+    }
   }
 
   public render () {
@@ -992,13 +1027,13 @@ export class Bizlogic extends React.Component<IBizlogicFormProps, IBizlogicFormS
     const optionSource = sqlVisualTypes.map((opt) => <Option key={opt} value={opt}>{opt}</Option>)
 
     const modelColumns = [{
-      title: '表名',
+      title: '字段名称',
       dataIndex: 'name',
       className: `${utilStyles.textAlignLeft}`,
       key: 'name',
       width: '25%'
     }, {
-      title: '类型',
+      title: '数据类型',
       dataIndex: 'modelType',
       key: 'modelType',
       className: `${utilStyles.textAlignLeft}`,
@@ -1011,7 +1046,7 @@ export class Bizlogic extends React.Component<IBizlogicFormProps, IBizlogicFormS
           onChange={this.selectModelItem(record, 'modelType')}
         />)}
     }, {
-      title: '字段类型',
+      title: '可视化类型',
       dataIndex: 'visualType',
       className: `${utilStyles.textAlignLeft}`,
       key: 'visualType',
@@ -1144,6 +1179,7 @@ export class Bizlogic extends React.Component<IBizlogicFormProps, IBizlogicFormS
     return (
       <div className={styles.bizlogic}>
         <EditorHeader
+          currentType="view"
           className={styles.header}
           name={name}
           description={description}
@@ -1191,6 +1227,7 @@ export class Bizlogic extends React.Component<IBizlogicFormProps, IBizlogicFormS
                 onExpand={this.onExpand}
                 expandedKeys={expandedKeys}
                 autoExpandParent={autoExpandParent}
+                onSelect={this.handleTree}
               >
               {loop(data || [])}
               </Tree>
